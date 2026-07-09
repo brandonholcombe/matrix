@@ -76,16 +76,23 @@ There is no separate "Kodloki" app in the stores — that would require building
 and publishing white-labeled apps (Apple/Google dev accounts, review). Element
 pointed at your server is the supported path.
 
-## Voice / video (optional, fiddly)
+## Voice / video
 
-Text + media chat works with zero extra setup. Calls need a TURN server:
+**1:1 calls are enabled** via a `coturn` TURN server (`K8s/coturn.yaml`,
+ArgoCD-managed). The tow-c1 LKE nodes have no Linode Cloud Firewall attached,
+so no firewall rules were needed — coturn binds a node's public IP directly on
+`hostNetwork`. The TURN shared secret lives in `secret-synapse.yaml`
+(`turn_shared_secret`) and `apply-secrets.sh` derives the `coturn-secret` from
+it so they always match.
 
-1. `kubectl apply -f K8s/optional/coturn-secret.example.yaml` (with real secret).
-2. `kubectl apply -f K8s/optional/coturn.yaml`.
-3. Open `3478/udp+tcp` and `49160-49200/udp` to the coturn node in the Linode
-   Cloud Firewall.
-4. Add the `turn_uris` / `turn_shared_secret` block (see `coturn.yaml` header)
-   to `secret-synapse.yaml` and re-run `apply-secrets.sh`; restart Synapse.
+- coturn is **pinned to node `lke484433-700897-00b7001f0000` (172.234.239.87)**
+  so its public IP is stable and matches `turn_uris`. If that node is recycled,
+  update `nodeName` in `coturn.yaml` **and** `turn_uris` in `secret-synapse.yaml`.
+- Relay range `49160-49200/udp`, control `3478/udp+tcp`.
+
+**Group calls** (Telegram-style) are NOT enabled — those need Element Call
+backed by a LiveKit SFU + `livekit-jwt-service` + MatrixRTC config. That's a
+separate follow-up stack.
 
 ## Known limitations (Matrix, honest list)
 

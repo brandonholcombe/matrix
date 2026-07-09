@@ -1,20 +1,16 @@
-# OPTIONAL — TURN server for Element voice/video calls (WebRTC NAT traversal).
-# NOT auto-synced by ArgoCD (lives outside the non-recursive K8s/ path).
+# coturn — TURN server for Element voice/video (WebRTC NAT traversal).
+# ArgoCD-managed. Requires the out-of-band `coturn-secret` (apply-secrets.sh).
 #
-# Why this is the fiddly part: coturn needs a public IP plus a wide UDP port
-# range, which a NodeBalancer can't reasonably front. The pattern below uses
-# hostNetwork so coturn binds a node's own public IP. You MUST then open these
-# ports to that node in the Linode Cloud Firewall:
-#     3478/udp, 3478/tcp   (TURN control)
-#     49160-49200/udp      (relay range — matches min/max-port below)
+# Networking note (tow-c1): the LKE nodes have NO Linode Cloud Firewall
+# attached, so node public IPs are open — no firewall rules needed. coturn uses
+# hostNetwork to bind a node's public IP directly:
+#     3478/udp + 3478/tcp   TURN control
+#     49160-49200/udp       relay range (matches --min/--max-port below)
 #
-# After deploying, add the matching block to secret-synapse.yaml and re-apply:
-#     turn_uris:
-#       - "turn:<NODE_PUBLIC_IP>:3478?transport=udp"
-#       - "turn:<NODE_PUBLIC_IP>:3478?transport=tcp"
-#     turn_shared_secret: "<same value as coturn-secret TURN_SECRET>"
-#     turn_user_lifetime: 86400000
-#     turn_allow_guests: false
+# FRAGILITY: pinned to a specific node via nodeName so its public IP is stable
+# and matches turn_uris in secret-synapse.yaml. If that node is recycled/removed,
+# update BOTH nodeName here and turn_uris in secret-synapse.yaml to the new node.
+#   node: lke484433-700897-00b7001f0000  ->  172.234.239.87
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -34,6 +30,7 @@ spec:
     spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      nodeName: lke484433-700897-00b7001f0000
       containers:
         - name: coturn
           image: coturn/coturn:4.6
@@ -49,13 +46,16 @@ spec:
             - "--no-cli"
             - "--no-tls"
             - "--no-dtls"
+            # Lock down relay abuse on a public-IP TURN server.
+            - "--no-loopback-peers"
+            - "--no-multicast-peers"
           env:
             - name: TURN_SECRET
               valueFrom:
                 secretKeyRef:
                   name: coturn-secret
                   key: TURN_SECRET
-          # coturn reads the shared secret from this env via the flag expansion below.
+          # Inject the shared secret via flag from env (kept out of the manifest).
           command: ["sh", "-c", "exec turnserver --static-auth-secret=$TURN_SECRET \"$@\"", "--"]
           resources:
             requests:

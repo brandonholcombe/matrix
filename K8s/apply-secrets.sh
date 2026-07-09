@@ -32,4 +32,14 @@ kubectl -n matrix create secret generic synapse-secrets \
   --from-file=secrets.yaml=./secret-synapse.yaml \
   --dry-run=client -o yaml | kubectl apply -f -
 
+# coturn shared secret (voice/video). Derived from the same source of truth so
+# it always matches Synapse's turn_shared_secret. Skipped if TURN isn't configured.
+TURN_SECRET=$(python3 -c "import yaml; c=yaml.safe_load(open('secret-synapse.yaml')); print(c.get('turn_shared_secret',''))")
+if [ -n "$TURN_SECRET" ]; then
+  kubectl -n matrix create secret generic coturn-secret \
+    --from-literal=TURN_SECRET="${TURN_SECRET}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  echo "✓ coturn-secret applied"
+fi
+
 echo "✓ matrix-postgres-secret and synapse-secrets applied to namespace 'matrix'"
