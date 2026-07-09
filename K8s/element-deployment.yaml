@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: element-config
+  namespace: matrix
+  labels:
+    app: element
+data:
+  config.json: |
+    {
+      "default_server_config": {
+        "m.homeserver": {
+          "base_url": "https://matrix.kodloki.io",
+          "server_name": "matrix.kodloki.io"
+        }
+      },
+      "brand": "Kodloki Chat",
+      "disable_custom_urls": true,
+      "disable_guests": true,
+      "disable_3pid_login": true,
+      "default_country_code": "US",
+      "room_directory": { "servers": ["matrix.kodloki.io"] },
+      "setting_defaults": { "MessageComposerInput.showStickersButton": false },
+      "features": {}
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: element
+  namespace: matrix
+  labels:
+    app: element
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: element
+  template:
+    metadata:
+      labels:
+        app: element
+    spec:
+      containers:
+        - name: element
+          image: vectorim/element-web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /app/config.json
+              subPath: config.json
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+      volumes:
+        - name: config
+          configMap:
+            name: element-config
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: element
+  namespace: matrix
+  labels:
+    app: element
+spec:
+  type: ClusterIP
+  selector:
+    app: element
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP

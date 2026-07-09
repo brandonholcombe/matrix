@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: synapse
+  namespace: matrix
+  labels:
+    app: synapse
+spec:
+  serviceName: synapse
+  replicas: 1
+  selector:
+    matchLabels:
+      app: synapse
+  template:
+    metadata:
+      labels:
+        app: synapse
+    spec:
+      securityContext:
+        # matrixdotorg/synapse runs as UID/GID 991.
+        runAsUser: 991
+        runAsGroup: 991
+        fsGroup: 991
+      initContainers:
+        # Generate the signing key onto the PVC on first boot only. --generate-keys
+        # is a no-op if /data/keys/signing.key already exists, so this is idempotent.
+        - name: generate-keys
+          image: matrixdotorg/synapse:latest
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - >
+              mkdir -p /data/keys &&
+              test -f /data/keys/signing.key ||
+              python -m synapse.app.homeserver
+              --config-path /config/homeserver.yaml
+              --config-path /secrets/secrets.yaml
+              --generate-keys
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: config, mountPath: /config }
+            - { name: secrets, mountPath: /secrets }
+      containers:
+        - name: synapse
+          image: matrixdotorg/synapse:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "synapse.app.homeserver"]
+          args:
+            - "--config-path"
+            - "/config/homeserver.yaml"
+            - "--config-path"
+            - "/secrets/secrets.yaml"
+          ports:
+            - name: http
+              containerPort: 8008
+              protocol: TCP
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: config, mountPath: /config }
+            - { name: secrets, mountPath: /secrets }
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8008
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8008
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1536Mi"
+              cpu: "1000m"
+      volumes:
+        - name: config
+          configMap:
+            name: synapse-config
+        - name: secrets
+          secret:
+            secretName: synapse-secrets
+      restartPolicy: Always
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: linode-block-storage-retain
+        resources:
+          requests:
+            storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: synapse
+  namespace: matrix
+  labels:
+    app: synapse
+spec:
+  type: ClusterIP
+  selector:
+    app: synapse
+  ports:
+    - name: http
+      port: 8008
+      targetPort: 8008
+      protocol: TCP

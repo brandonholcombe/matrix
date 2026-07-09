@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: matrix
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/brandonholcombe/matrix.git
+    targetRevision: HEAD
+    path: K8s
+    # Non-recursive: K8s/optional/ (coturn) is intentionally NOT auto-synced.
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: matrix
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+  # The two Secrets are applied out-of-band (apply-secrets.sh); ignore drift.
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: synapse-secrets
+      jsonPointers: ["/data"]
+    - group: ""
+      kind: Secret
+      name: matrix-postgres-secret
+      jsonPointers: ["/data"]
+  revisionHistoryLimit: 3

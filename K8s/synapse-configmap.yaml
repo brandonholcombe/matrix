@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: synapse-config
+  namespace: matrix
+  labels:
+    app: synapse
+data:
+  # Non-secret config. Secret values (DB password, macaroon/form/registration
+  # secrets) live in the `synapse-secrets` Secret and are merged in at startup
+  # via a second --config-path. Synapse loads multiple config files in order.
+  homeserver.yaml: |
+    # --- Identity ---
+    # server_name is baked into every user/room ID (@you:matrix.kodloki.io) and
+    # is effectively PERMANENT. Because this is a closed, non-federated island we
+    # keep it self-contained under matrix.kodloki.io (no apex .well-known needed).
+    server_name: "matrix.kodloki.io"
+    public_baseurl: "https://matrix.kodloki.io/"
+    pid_file: /data/homeserver.pid
+    signing_key_path: "/data/keys/signing.key"
+
+    listeners:
+      - port: 8008
+        tls: false
+        type: http
+        x_forwarded: true          # behind ingress-nginx
+        bind_addresses: ['0.0.0.0']
+        resources:
+          - names: [client, federation]
+            compress: false
+
+    # --- Storage ---
+    media_store_path: "/data/media_store"
+    max_upload_size: "100M"
+    log_config: "/config/log.config"
+
+    # --- Closed island: no registration, no federation ---
+    enable_registration: false
+    enable_registration_without_verification: false
+    # Admins mint one-time tokens to onboard the <100 users (see README).
+    registration_requires_token: true
+    # Empty whitelist disables ALL federation (in and out).
+    federation_domain_whitelist: []
+    allow_public_rooms_over_federation: false
+    allow_public_rooms_without_auth: false
+    # Don't reach out to external key servers (matrix.org) — we don't federate.
+    trusted_key_servers: []
+    suppress_key_server_warning: true
+
+    # --- Encryption ---
+    # Turn on E2EE by default for all private (invite-only) rooms and DMs.
+    encryption_enabled_by_default_for_room_type: invite
+
+    # --- Misc ---
+    report_stats: false
+    serve_server_wellknown: true
+    presence:
+      enabled: true
+    url_preview_enabled: false      # avoids SSRF surface; flip on if you want link previews
+
+  log.config: |
+    version: 1
+    formatters:
+      precise:
+        format: '%(asctime)s - %(name)s - %(lineno)d - %(levelname)s - %(request)s - %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: precise
+    loggers:
+      synapse.storage.SQL:
+        level: WARNING
+    root:
+      level: INFO
+      handlers: [console]
+    disable_existing_loggers: false

@@ -1,0 +1,67 @@
+# OPTIONAL — TURN server for Element voice/video calls (WebRTC NAT traversal).
+# NOT auto-synced by ArgoCD (lives outside the non-recursive K8s/ path).
+#
+# Why this is the fiddly part: coturn needs a public IP plus a wide UDP port
+# range, which a NodeBalancer can't reasonably front. The pattern below uses
+# hostNetwork so coturn binds a node's own public IP. You MUST then open these
+# ports to that node in the Linode Cloud Firewall:
+#     3478/udp, 3478/tcp   (TURN control)
+#     49160-49200/udp      (relay range — matches min/max-port below)
+#
+# After deploying, add the matching block to secret-synapse.yaml and re-apply:
+#     turn_uris:
+#       - "turn:<NODE_PUBLIC_IP>:3478?transport=udp"
+#       - "turn:<NODE_PUBLIC_IP>:3478?transport=tcp"
+#     turn_shared_secret: "<same value as coturn-secret TURN_SECRET>"
+#     turn_user_lifetime: 86400000
+#     turn_allow_guests: false
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coturn
+  namespace: matrix
+  labels:
+    app: coturn
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coturn
+  template:
+    metadata:
+      labels:
+        app: coturn
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: coturn
+          image: coturn/coturn:4.6
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-n"
+            - "--log-file=stdout"
+            - "--use-auth-secret"
+            - "--realm=matrix.kodloki.io"
+            - "--listening-port=3478"
+            - "--min-port=49160"
+            - "--max-port=49200"
+            - "--no-cli"
+            - "--no-tls"
+            - "--no-dtls"
+          env:
+            - name: TURN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: coturn-secret
+                  key: TURN_SECRET
+          # coturn reads the shared secret from this env via the flag expansion below.
+          command: ["sh", "-c", "exec turnserver --static-auth-secret=$TURN_SECRET \"$@\"", "--"]
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+      restartPolicy: Always
