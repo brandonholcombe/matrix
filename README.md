@@ -65,6 +65,31 @@ kubectl -n matrix exec -it "$POD" -- \
 # Hand each token to a user; they self-register in the app with it.
 ```
 
+## Invite links (matrix-registration)
+
+New users onboard via **`https://register.kodloki.io/register?token=<TOKEN>`**
+(the `matrix-registration` service, `K8s/registration.yaml`). It registers
+accounts through Synapse's shared secret, so Synapse's own
+`enable_registration` stays `false` — this is the single controlled door.
+Upstream is archived/EOL but stable and pinned to `zeratax/matrix-registration:v0.9.1`.
+
+Token admin API (auth header `Authorization: SharedSecret <admin_api_shared_secret>`,
+value in the gitignored `K8s/registration-config.yaml`):
+
+```bash
+ADMIN=$(python3 -c "import yaml;print(yaml.safe_load(open('K8s/registration-config.yaml'))['admin_api_shared_secret'])")
+
+# Create a shared, multi-use link token (100 signups, expiry YYYY-MM-DD):
+curl -sX POST https://register.kodloki.io/api/token \
+  -H "Authorization: SharedSecret $ADMIN" -H 'Content-Type: application/json' \
+  -d '{"max_usage":100,"expiration_date":"2027-07-09"}'   # -> {"name":"XXX",...}
+# link = https://register.kodloki.io/register?token=XXX
+
+curl -s  https://register.kodloki.io/api/token -H "Authorization: SharedSecret $ADMIN"          # list
+curl -sX PATCH https://register.kodloki.io/api/token/XXX -H "Authorization: SharedSecret $ADMIN" \
+  -H 'Content-Type: application/json' -d '{"disabled":true}'                                    # revoke
+```
+
 ## Clients
 
 - **Mobile:** users install **Element X** (or classic Element) from the App
