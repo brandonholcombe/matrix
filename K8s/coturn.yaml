@@ -46,8 +46,8 @@ spec:
             - "--no-cli"
             - "--no-tls"
             - "--no-dtls"
-            # Lock down relay abuse on a public-IP TURN server.
-            - "--no-loopback-peers"
+            # Lock down relay abuse on a public-IP TURN server. (Loopback peers
+            # are denied by default in coturn 4.6, so no flag needed for that.)
             - "--no-multicast-peers"
           env:
             - name: TURN_SECRET
