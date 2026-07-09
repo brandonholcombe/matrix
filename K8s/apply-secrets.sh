@@ -42,4 +42,13 @@ if [ -n "$TURN_SECRET" ]; then
   echo "✓ coturn-secret applied"
 fi
 
+# matrix-registration config (contains registration + admin API secrets).
+# Mounted at /config/config.yaml. Optional — skipped if the file is absent.
+if [ -f ./registration-config.yaml ]; then
+  kubectl -n matrix create secret generic matrix-registration-config \
+    --from-file=config.yaml=./registration-config.yaml \
+    --dry-run=client -o yaml | kubectl apply -f -
+  echo "✓ matrix-registration-config applied"
+fi
+
 echo "✓ matrix-postgres-secret and synapse-secrets applied to namespace 'matrix'"

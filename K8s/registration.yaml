@@ -1,0 +1,125 @@
+# matrix-registration — token-gated web signup ("clickable invite links").
+# Registers users via Synapse's shared-secret endpoint, so Synapse's own
+# enable_registration stays false; this is the single onboarding door.
+# NOTE: upstream (zeratax/matrix-registration) was archived 2025-11-12; this is
+# a stable, self-contained EOL tool. Config comes from the out-of-band
+# `matrix-registration-config` Secret (apply-secrets.sh).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: matrix-registration-data
+  namespace: matrix
+  labels:
+    app: matrix-registration
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: linode-block-storage-retain
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: matrix-registration
+  namespace: matrix
+  labels:
+    app: matrix-registration
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate            # single RWO volume — no rolling overlap
+  selector:
+    matchLabels:
+      app: matrix-registration
+  template:
+    metadata:
+      labels:
+        app: matrix-registration
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: matrix-registration
+          image: zeratax/matrix-registration:latest
+          imagePullPolicy: IfNotPresent
+          command: ["matrix-registration", "--config-path", "/config/config.yaml", "serve"]
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            tcpSocket: { port: 5000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 5000 }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "20m"
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+      volumes:
+        - name: config
+          secret:
+            secretName: matrix-registration-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: matrix-registration-data
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: matrix-registration
+  namespace: matrix
+  labels:
+    app: matrix-registration
+spec:
+  type: ClusterIP
+  selector:
+    app: matrix-registration
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: matrix-registration
+  namespace: matrix
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+  labels:
+    app: matrix-registration
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [register.kodloki.io]
+      secretName: matrix-registration-tls
+  rules:
+    - host: register.kodloki.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: matrix-registration
+                port: { number: 5000 }

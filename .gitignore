@@ -1,5 +1,6 @@
 # Real secrets — never commit. Only *.example.yaml templates are tracked.
 K8s/secret-synapse.yaml
+K8s/registration-config.yaml
 K8s/optional/coturn-secret.yaml
 .pg-password
 *.tmp

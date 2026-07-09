@@ -1,0 +1,37 @@
+# TEMPLATE for matrix-registration config. Copy to K8s/registration-config.yaml
+# (gitignored), fill in real secrets, then run apply-secrets.sh.
+#   registration_shared_secret -> must match Synapse's (in secret-synapse.yaml)
+#   admin_api_shared_secret    -> openssl rand -hex 32 (protects /api/token)
+server_location: 'http://synapse:8008'
+server_name: 'matrix.kodloki.io'
+registration_shared_secret: 'REPLACE_ME_MATCH_SYNAPSE_REG_SECRET'
+admin_api_shared_secret: 'REPLACE_ME_ADMIN_API_SECRET'
+base_url: ''
+client_redirect: 'https://element.kodloki.io/#/login'
+client_logo: 'static/images/element-logo.png'
+db: 'sqlite:////data/db.sqlite3'
+host: '0.0.0.0'
+port: 5000
+rate_limit: ["100 per day", "10 per minute"]
+allow_cors: false
+ip_logging: false
+password:
+  min_length: 8
+username:
+  validation_regex: []
+  invalidation_regex: []
+logging:
+  version: 1
+  formatters:
+    brief:
+      format: '%(asctime)s %(levelname)s %(name)s %(message)s'
+  handlers:
+    console:
+      class: logging.StreamHandler
+      level: INFO
+      formatter: brief
+      stream: 'ext://sys.stdout'
+  root:
+    level: INFO
+    handlers: [console]
+  disable_existing_loggers: false
