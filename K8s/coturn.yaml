@@ -40,6 +40,10 @@ spec:
             - "--log-file=stdout"
             - "--use-auth-secret"
             - "--realm=matrix.kodloki.io"
+            # These LKE nodes are in a Linode VPC (172.31.x); the public IP is
+            # 1:1-NATed and not on the local interface, so coturn must advertise
+            # it explicitly or it hands out unreachable VPC relay candidates.
+            - "--external-ip=172.234.239.87"
             - "--listening-port=3478"
             - "--min-port=49160"
             - "--max-port=49200"
