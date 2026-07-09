@@ -43,7 +43,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: matrix-registration
-          image: zeratax/matrix-registration:latest
+          image: zeratax/matrix-registration:v0.9.1
           imagePullPolicy: IfNotPresent
           command: ["matrix-registration", "--config-path", "/config/config.yaml", "serve"]
           ports:
